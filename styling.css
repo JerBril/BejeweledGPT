@@ -1,0 +1,6 @@
+.tile {
+    transition: opacity 0.5s ease-out;
+}
+.hidden {
+    opacity: 0;
+}
