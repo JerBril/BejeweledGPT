@@ -10,13 +10,20 @@ const tileSize = 75;
 let board = [];
 let selectedTile = null;
 
+class gameBoardRectangle {
+    constructor(x,y,value) {
+        this.x = x;
+        this.y = y;
+        this.value = value;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', (event) => {
 
     // Initialize the board with random tiles
     for (let x = 0; x < cols; x++) {
-        board[x] = [];
         for (let y = 0; y < rows; y++) {
-            board[x][y] = Math.floor(Math.random() * 5); // Assuming 5 types of tiles
+            board.push(new gameBoardRectangle(x,y,Math.floor(Math.random() * 5))); // Assuming 5 types of tiles
         }
     }
 
@@ -31,8 +38,8 @@ document.addEventListener('click', (event) => {
     if (!selectedTile) {
         selectedTile = {x, y};
     } else {
-        checkMatchesGameLogic();
         swapTiles(selectedTile.x, selectedTile.y, x, y);
+        handleMatchesGameLogic();
         drawBoard();
 
         selectedTile = null;
@@ -41,14 +48,31 @@ document.addEventListener('click', (event) => {
 
 // Function to draw the board
 function drawBoard() {
+    canvas.innerHTML = '';
     for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows; y++) {
-            ctx.fillStyle = getColor(board[x][y]);
-            ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-            ctx.strokeRect(x * tileSize, y * tileSize, tileSize, tileSize);
+            const boardRect = getBoardRectangle(x,y);
+            createJewel(boardRect);
         }
     }
-    console.log(board.toString());
+}
+
+function createJewel(boardRect)
+{
+    console.log(boardRect.x * tileSize);
+    const jewel = document.createElement('div');
+
+     jewel.style.backgroundColor = getColor(boardRect.value);
+     jewel.style.left = boardRect.x * tileSize+'px';
+     jewel.style.top = boardRect.y * tileSize+'px';
+     jewel.style.width = tileSize+'px';
+     jewel.style.height = tileSize+'px';
+     jewel.style.borderStyle = "solid";
+     jewel.style.borderColor = "red";
+     jewel.style.borderWidth = "1px";
+     jewel.style.position = 'absolute';
+     jewel.style.zIndex = "100000";
+     ctx.appendChild(jewel);
 }
 
 // Function to get color based on tile type
@@ -64,9 +88,13 @@ function getColor(tile) {
 }
 
 function swapTiles(x1, y1, x2, y2) {
-    const temp = board[x1][y1];
-    board[x1][y1] = board[x2][y2];
-    board[x2][y2] = temp;
+    const gameRect1 = getBoardRectangle(x1,y1);
+    const gameRect2 = getBoardRectangle(x2,y2);
+    const gameRect1Value = gameRect1.value;
+    const gameRect2Value = gameRect2.value;
+
+    setBoardRectangleValue(x1,y1,gameRect2Value);
+    setBoardRectangleValue(x2,y2,gameRect1Value);
 }
 
 function removeMatches(matches) {
@@ -83,15 +111,11 @@ function animateRemoval(matches) {
     });
 }
 
-function checkMatchesGameLogic() {
+function handleMatchesGameLogic() {
     let matches = checkForMatches();
     if (matches.length > 0) {
         removeMatches(matches);
         animateRemoval(matches);
-        setTimeout(() => {
-            drawBoard();
-            // Additional logic to drop tiles and refill the board
-        }, 500); // match the transition duration
     }
 }
 
@@ -101,10 +125,13 @@ function checkForMatches() {
     // Check for horizontal matches
     for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols - 2; x++) {
-            if (board[x][y] === board[x + 1][y] && board[x][y] === board[x + 2][y]) {
-                matches.push({x: x, y: y});
-                matches.push({x: x + 1, y: y});
-                matches.push({x: x + 2, y: y});
+            let first = getBoardRectangle(x,y);
+            let second = getBoardRectangle(x+1,y);
+            let third = getBoardRectangle(x+2,y);
+            if (first.value === second.value && first.value === third.value) {
+                matches.push(first);
+                matches.push(second);
+                matches.push(third);
             }
         }
     }
@@ -112,13 +139,27 @@ function checkForMatches() {
     // Check for vertical matches
     for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows - 2; y++) {
-            if (board[x][y] === board[x][y + 1] && board[x][y] === board[x][y + 2]) {
-                matches.push({x: x, y: y});
-                matches.push({x: x, y: y + 1});
-                matches.push({x: x, y: y + 2});
+            let first = getBoardRectangle(x,y);
+            let second = getBoardRectangle(x,y+1);
+            let third = getBoardRectangle(x,y+2);
+            if (first.value === second.value && first.value === third.value) {
+                matches.push(first);
+                matches.push(second);
+                matches.push(third);
             }
         }
     }
-
+    console.log(matches);
     return matches;
+}
+
+function getBoardRectangle(x,y)
+{
+    return board.find(rectangle => rectangle.x === x && rectangle.y === y);
+}
+
+function setBoardRectangleValue(x,y,value)
+{
+    const boardRect = getBoardRectangle(x,y);
+    boardRect.value = value;
 }
