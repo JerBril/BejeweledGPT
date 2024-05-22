@@ -39,7 +39,7 @@ document.addEventListener('click', (event) => {
         selectedTile = {x, y};
     } else {
         swapTiles(selectedTile.x, selectedTile.y, x, y);
-        handleMatchesGameLogic();
+        checkBoardState();
         drawBoard();
 
         selectedTile = null;
@@ -52,27 +52,11 @@ function drawBoard() {
     for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows; y++) {
             const boardRect = getBoardRectangle(x,y);
-            createJewel(boardRect);
+            ctx.fillStyle = getColor(boardRect.value);
+            ctx.fillRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
+            ctx.strokeRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
         }
     }
-}
-
-function createJewel(boardRect)
-{
-    console.log(boardRect.x * tileSize);
-    const jewel = document.createElement('div');
-
-     jewel.style.backgroundColor = getColor(boardRect.value);
-     jewel.style.left = boardRect.x * tileSize+'px';
-     jewel.style.top = boardRect.y * tileSize+'px';
-     jewel.style.width = tileSize+'px';
-     jewel.style.height = tileSize+'px';
-     jewel.style.borderStyle = "solid";
-     jewel.style.borderColor = "red";
-     jewel.style.borderWidth = "1px";
-     jewel.style.position = 'absolute';
-     jewel.style.zIndex = "100000";
-     ctx.appendChild(jewel);
 }
 
 // Function to get color based on tile type
@@ -99,8 +83,7 @@ function swapTiles(x1, y1, x2, y2) {
 
 function removeMatches(matches) {
     matches.forEach(match => {
-        const { x, y } = match;
-        board[x][y] = null;
+        match.value = 5;
     });
 }
 
@@ -111,11 +94,43 @@ function animateRemoval(matches) {
     });
 }
 
+function checkBoardState()
+{
+    handleMatchesGameLogic();
+    handleRemovedMatchesGameLogic();
+    handleFillingUpBoardGameLogic();
+}
+
 function handleMatchesGameLogic() {
     let matches = checkForMatches();
     if (matches.length > 0) {
         removeMatches(matches);
-        animateRemoval(matches);
+        //animateRemoval(matches);
+    }
+}
+
+function handleRemovedMatchesGameLogic() {
+    for (let y = rows-1; y >= 0; y--) {
+        for (let x = cols-1; x >= 0; x--) {
+            let cur = getBoardRectangle(x,y);
+            if(cur.value == 5)
+            {
+                flipValueWithTop(x,y);
+            }
+        }
+    }
+}
+
+function handleFillingUpBoardGameLogic()
+{
+    for (let y = rows-1; y >= 0; y--) {
+        for (let x = cols-1; x >= 0; x--) {
+            let cur = getBoardRectangle(x,y);
+            if(cur.value == 5)
+            {
+                cur.value = Math.floor(Math.random() * 5);
+            }
+        }
     }
 }
 
@@ -149,7 +164,7 @@ function checkForMatches() {
             }
         }
     }
-    console.log(matches);
+
     return matches;
 }
 
@@ -162,4 +177,21 @@ function setBoardRectangleValue(x,y,value)
 {
     const boardRect = getBoardRectangle(x,y);
     boardRect.value = value;
+}
+
+function flipValueWithTop(x,y)
+{
+    if(y != 0)
+    {
+        let topValue = null;
+        let checkY = y;
+        while((topValue == null || topValue == 5) && checkY > 0)
+        {
+            checkY -= 1;
+            topValue = getBoardRectangle(x,checkY).value;
+        }
+        console.log(checkY);
+        setBoardRectangleValue(x,y,topValue)
+        setBoardRectangleValue(x,checkY,5)
+    }
 }
