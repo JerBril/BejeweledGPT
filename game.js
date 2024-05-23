@@ -9,12 +9,14 @@ const tileSize = 75;
 // Board variables 
 let board = [];
 let selectedTile = null;
+let opacity = 1;
 
 class gameBoardRectangle {
     constructor(x,y,value) {
         this.x = x;
         this.y = y;
         this.value = value;
+        this.matched = false;
     }
 }
 
@@ -34,13 +36,12 @@ document.addEventListener('click', (event) => {
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor((event.clientX - rect.left) / tileSize);
     const y = Math.floor((event.clientY - rect.top) / tileSize);
-
+    opacity = 1;
     if (!selectedTile) {
         selectedTile = {x, y};
     } else {
         swapTiles(selectedTile.x, selectedTile.y, x, y);
-        checkBoardState();
-        drawBoard();
+        handleMatchesGameLogicAndAnimation();
 
         selectedTile = null;
     }
@@ -51,12 +52,18 @@ function drawBoard() {
     canvas.innerHTML = '';
     for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows; y++) {
-            const boardRect = getBoardRectangle(x,y);
-            ctx.fillStyle = getColor(boardRect.value);
-            ctx.fillRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
-            ctx.strokeRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
+            drawRectangle(x,y);
         }
     }
+}
+
+function drawRectangle(x,y)
+{
+    const boardRect = getBoardRectangle(x,y);
+    ctx.fillStyle = getColor(boardRect.value);
+    ctx.globalAlpha = opacity;
+    ctx.fillRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
+    ctx.strokeRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
 }
 
 // Function to get color based on tile type
@@ -83,37 +90,54 @@ function swapTiles(x1, y1, x2, y2) {
 
 function removeMatches(matches) {
     matches.forEach(match => {
-        match.value = 5;
+        match.matched =true;
     });
 }
 
 function animateRemoval(matches) {
-    matches.forEach(match => {
-        const { x, y } = match;
-        ctx.clearRect(x * tileSize, y * tileSize, tileSize, tileSize);
-    });
+    return new Promise((resolve) => {
+        console.log('test');
+        function animate() {
+            if(opacity > 0)
+            {
+                opacity -= 0.01;
+                matches.forEach(match => {
+                    ctx.clearRect(match.x * tileSize, match.y * tileSize, tileSize, tileSize);
+                    drawRectangle(match.x,match.y);
+                });
+        
+                requestAnimationFrame(animate);
+            }
+            else{
+                opacity = 1;
+                resolve();
+            }
+        }
+        requestAnimationFrame(animate);
+    })
 }
 
 function checkBoardState()
 {
-    handleMatchesGameLogic();
     handleRemovedMatchesGameLogic();
     handleFillingUpBoardGameLogic();
+    drawBoard();
 }
 
-function handleMatchesGameLogic() {
+async function handleMatchesGameLogicAndAnimation() {
     let matches = checkForMatches();
     if (matches.length > 0) {
         removeMatches(matches);
-        //animateRemoval(matches);
+        await animateRemoval(matches);
     }
+    checkBoardState();
 }
 
 function handleRemovedMatchesGameLogic() {
     for (let y = rows-1; y >= 0; y--) {
         for (let x = cols-1; x >= 0; x--) {
             let cur = getBoardRectangle(x,y);
-            if(cur.value == 5)
+            if(cur.matched == true)
             {
                 flipValueWithTop(x,y);
             }
@@ -126,7 +150,7 @@ function handleFillingUpBoardGameLogic()
     for (let y = rows-1; y >= 0; y--) {
         for (let x = cols-1; x >= 0; x--) {
             let cur = getBoardRectangle(x,y);
-            if(cur.value == 5)
+            if(cur.matched == true)
             {
                 cur.value = Math.floor(Math.random() * 5);
             }
@@ -183,15 +207,14 @@ function flipValueWithTop(x,y)
 {
     if(y != 0)
     {
-        let topValue = null;
+        let topRect = null;
         let checkY = y;
-        while((topValue == null || topValue == 5) && checkY > 0)
+        while((topRect == null || topRect.value == null || topRect.matched == true) && checkY > 0)
         {
             checkY -= 1;
-            topValue = getBoardRectangle(x,checkY).value;
+            topRect = getBoardRectangle(x,checkY);
         }
-        console.log(checkY);
-        setBoardRectangleValue(x,y,topValue)
-        setBoardRectangleValue(x,checkY,5)
+
+        setBoardRectangleValue(x,y,topRect.value)
     }
 }
