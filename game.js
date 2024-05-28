@@ -2,54 +2,89 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // Constants
-const cols = 8;
-const rows = 8;
+const cols = 10;
+const rows = 10;
 const tileSize = 75;
 
 // Board variables 
 let board = [];
 let selectedTile = null;
 let opacity = 1;
+let eventsPause = false;
 
 class gameBoardRectangle {
     constructor(x,y,value) {
         this.x = x;
         this.y = y;
         this.value = value;
-        this.matched = false;
+        this.removal = false;
+        this.dropIn = false;
     }
 }
 
 document.addEventListener('DOMContentLoaded', (event) => {
 
     // Initialize the board with random tiles
+    canvas.width = cols*tileSize;
+    canvas.height = rows*tileSize;
     for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows; y++) {
+            
             board.push(new gameBoardRectangle(x,y,Math.floor(Math.random() * 5))); // Assuming 5 types of tiles
         }
     }
 
-    drawBoard();
+    drawGame();
 });
 
 document.addEventListener('click', (event) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.floor((event.clientX - rect.left) / tileSize);
-    const y = Math.floor((event.clientY - rect.top) / tileSize);
-    opacity = 1;
-    if (!selectedTile) {
-        selectedTile = {x, y};
-    } else {
-        swapTiles(selectedTile.x, selectedTile.y, x, y);
-        handleMatchesGameLogicAndAnimation();
-
-        selectedTile = null;
+    if(!eventsPause)
+    {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((event.clientX - rect.left) / tileSize);
+        const y = Math.floor((event.clientY - rect.top) / tileSize);
+        opacity = 1;
+        if (!selectedTile) {
+            setSelectedTile(event.clientX,event.clientY)
+            drawGame();
+        } else {
+            if(checkSwapAllowed(x,y))
+            {
+                eventsPause = true;
+                swapTiles(selectedTile.x, selectedTile.y, x, y);
+                selectedTile = null;
+                drawGame();
+                handleClickGameplayLoop();
+            }
+            else{
+                console.log('move not allowed');
+            }        
+        }
     }
 });
 
+function setSelectedTile(x1,y1)
+{
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((x1 - rect.left) / tileSize);
+    const y = Math.floor((y1 - rect.top) / tileSize);
+    if(x < rows && y < cols)
+    {
+        selectedTile = {x, y};
+    }
+    else
+    {
+        console.log('no tile selected')
+    }
+}
+
 // Function to draw the board
-function drawBoard() {
-    canvas.innerHTML = '';
+function drawGame() {
+    drawBoard()
+    drawSelectedTile()
+}
+
+function drawBoard(){
     for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows; y++) {
             drawRectangle(x,y);
@@ -57,13 +92,32 @@ function drawBoard() {
     }
 }
 
+function drawSelectedTile()
+{
+    if(selectedTile != null)
+    {
+        let selectedRect = getBoardRectangle(selectedTile.x,selectedTile.y);
+        ctx.fillStyle = 'black';
+        ctx.lineWidth = 5
+        ctx.strokeRect(selectedRect.x * tileSize, selectedRect.y * tileSize, tileSize, tileSize);
+    }
+}
+
 function drawRectangle(x,y)
 {
     const boardRect = getBoardRectangle(x,y);
     ctx.fillStyle = getColor(boardRect.value);
+    ctx.lineWidth = 1;
     ctx.globalAlpha = opacity;
     ctx.fillRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
     ctx.strokeRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
+    ctx.fillStyle = 'black';
+
+
+    //Debug info
+    ctx.fillText('x: '+boardRect.x,boardRect.x*tileSize,boardRect.y*tileSize+50);
+    ctx.fillText('y: '+boardRect.y,boardRect.x*tileSize,boardRect.y*tileSize+40);
+    ctx.fillText('removal: '+boardRect.removal,boardRect.x*tileSize,boardRect.y*tileSize+30);
 }
 
 // Function to get color based on tile type
@@ -78,6 +132,19 @@ function getColor(tile) {
     }
 }
 
+function checkSwapAllowed(x,y)
+{
+    if(selectedTile != null)
+    {
+        let xDiff = Math.abs(selectedTile.x - x);
+        let yDiff = Math.abs(selectedTile.y - y);
+
+        return (xDiff + yDiff) == 1;
+    }
+
+    return false;
+}
+
 function swapTiles(x1, y1, x2, y2) {
     const gameRect1 = getBoardRectangle(x1,y1);
     const gameRect2 = getBoardRectangle(x2,y2);
@@ -88,19 +155,18 @@ function swapTiles(x1, y1, x2, y2) {
     setBoardRectangleValue(x2,y2,gameRect1Value);
 }
 
-function removeMatches(matches) {
+function labelMatchedJewels(matches) {
     matches.forEach(match => {
-        match.matched =true;
+        match.removal =true;
     });
 }
 
 function animateRemoval(matches) {
     return new Promise((resolve) => {
-        console.log('test');
         function animate() {
             if(opacity > 0)
             {
-                opacity -= 0.01;
+                opacity -= 0.003;
                 matches.forEach(match => {
                     ctx.clearRect(match.x * tileSize, match.y * tileSize, tileSize, tileSize);
                     drawRectangle(match.x,match.y);
@@ -117,27 +183,32 @@ function animateRemoval(matches) {
     })
 }
 
-function checkBoardState()
+function updateBoardState()
 {
     handleRemovedMatchesGameLogic();
     handleFillingUpBoardGameLogic();
-    drawBoard();
+    setAllJewelsToNotMatched();
+    drawGame();
 }
 
-async function handleMatchesGameLogicAndAnimation() {
+async function handleClickGameplayLoop() {
     let matches = checkForMatches();
-    if (matches.length > 0) {
-        removeMatches(matches);
+    while(matches.length > 0)
+    {
+        labelMatchedJewels(matches);
         await animateRemoval(matches);
+
+        updateBoardState();
+        matches = checkForMatches();
     }
-    checkBoardState();
+    eventsPause = false;
 }
 
 function handleRemovedMatchesGameLogic() {
     for (let y = rows-1; y >= 0; y--) {
         for (let x = cols-1; x >= 0; x--) {
             let cur = getBoardRectangle(x,y);
-            if(cur.matched == true)
+            if(cur.removal == true)
             {
                 flipValueWithTop(x,y);
             }
@@ -150,12 +221,20 @@ function handleFillingUpBoardGameLogic()
     for (let y = rows-1; y >= 0; y--) {
         for (let x = cols-1; x >= 0; x--) {
             let cur = getBoardRectangle(x,y);
-            if(cur.matched == true)
+            if(cur.removal == true)
             {
                 cur.value = Math.floor(Math.random() * 5);
+                cur.dropIn = true;
             }
         }
     }
+}
+
+function setAllJewelsToNotMatched()
+{
+    board.forEach(obj => {
+        obj.removal = false;
+    })
 }
 
 function checkForMatches() {
@@ -201,6 +280,7 @@ function setBoardRectangleValue(x,y,value)
 {
     const boardRect = getBoardRectangle(x,y);
     boardRect.value = value;
+    boardRect.removal = false;
 }
 
 function flipValueWithTop(x,y)
@@ -209,12 +289,20 @@ function flipValueWithTop(x,y)
     {
         let topRect = null;
         let checkY = y;
-        while((topRect == null || topRect.value == null || topRect.matched == true) && checkY > 0)
+        while((topRect == null || topRect.value == null || topRect.removal == true))
         {
             checkY -= 1;
+            if(checkY < 0)
+            {
+                topRect = null;
+                break;
+            }
             topRect = getBoardRectangle(x,checkY);
         }
-
-        setBoardRectangleValue(x,y,topRect.value)
+        if(topRect != null)
+        {
+            setBoardRectangleValue(x,y,topRect.value);
+            topRect.removal = true;
+        }
     }
 }
