@@ -1,15 +1,11 @@
+import { drawGame, drawRectangle, getBoardRectangle, setBoardRectangleValue } from "./gameDrawScript.js";
+import { board, tileSize, cols, rows } from "./boardValues.js";
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// Constants
-const cols = 10;
-const rows = 10;
-const tileSize = 75;
-
 // Board variables 
-let board = [];
 let selectedTile = null;
-let opacity = 1;
 let eventsPause = false;
 
 class gameBoardRectangle {
@@ -34,7 +30,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
         }
     }
 
-    drawGame();
+    drawGame(ctx, selectedTile);
 });
 
 document.addEventListener('click', (event) => {
@@ -43,17 +39,17 @@ document.addEventListener('click', (event) => {
         const rect = canvas.getBoundingClientRect();
         const x = Math.floor((event.clientX - rect.left) / tileSize);
         const y = Math.floor((event.clientY - rect.top) / tileSize);
-        opacity = 1;
+
         if (!selectedTile) {
             setSelectedTile(event.clientX,event.clientY)
-            drawGame();
+            drawGame(ctx, selectedTile);
         } else {
             if(checkSwapAllowed(x,y))
             {
                 eventsPause = true;
                 swapTiles(selectedTile.x, selectedTile.y, x, y);
                 selectedTile = null;
-                drawGame();
+                drawGame(ctx, selectedTile);
                 handleClickGameplayLoop();
             }
             else{
@@ -75,60 +71,6 @@ function setSelectedTile(x1,y1)
     else
     {
         console.log('no tile selected')
-    }
-}
-
-// Function to draw the board
-function drawGame() {
-    drawBoard()
-    drawSelectedTile()
-}
-
-function drawBoard(){
-    for (let x = 0; x < cols; x++) {
-        for (let y = 0; y < rows; y++) {
-            drawRectangle(x,y);
-        }
-    }
-}
-
-function drawSelectedTile()
-{
-    if(selectedTile != null)
-    {
-        let selectedRect = getBoardRectangle(selectedTile.x,selectedTile.y);
-        ctx.fillStyle = 'black';
-        ctx.lineWidth = 5
-        ctx.strokeRect(selectedRect.x * tileSize, selectedRect.y * tileSize, tileSize, tileSize);
-    }
-}
-
-function drawRectangle(x,y)
-{
-    const boardRect = getBoardRectangle(x,y);
-    ctx.fillStyle = getColor(boardRect.value);
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = opacity;
-    ctx.fillRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
-    ctx.strokeRect(boardRect.x * tileSize, boardRect.y * tileSize, tileSize, tileSize);
-    ctx.fillStyle = 'black';
-
-
-    //Debug info
-    ctx.fillText('x: '+boardRect.x,boardRect.x*tileSize,boardRect.y*tileSize+50);
-    ctx.fillText('y: '+boardRect.y,boardRect.x*tileSize,boardRect.y*tileSize+40);
-    ctx.fillText('removal: '+boardRect.removal,boardRect.x*tileSize,boardRect.y*tileSize+30);
-}
-
-// Function to get color based on tile type
-function getColor(tile) {
-    switch (tile) {
-        case 0: return 'red';
-        case 1: return 'blue';
-        case 2: return 'green';
-        case 3: return 'yellow';
-        case 4: return 'purple';
-        default: return 'black';
     }
 }
 
@@ -161,15 +103,16 @@ function labelMatchedJewels(matches) {
     });
 }
 
-function animateRemoval(matches) {
+function animatedRemoval(matches) {
     return new Promise((resolve) => {
+        let opacity = 1;
         function animate() {
             if(opacity > 0)
             {
                 opacity -= 0.003;
                 matches.forEach(match => {
                     ctx.clearRect(match.x * tileSize, match.y * tileSize, tileSize, tileSize);
-                    drawRectangle(match.x,match.y);
+                    drawRectangle(match.x,match.y,opacity);
                 });
         
                 requestAnimationFrame(animate);
@@ -183,12 +126,30 @@ function animateRemoval(matches) {
     })
 }
 
+function animatedDropping(droppingJewel, droppingCoord) {
+    return new Promise((resolve) => {
+        let x = droppingJewel.x*tileSize;
+        let y = droppingJewel.y*tileSize;
+        function animate() {
+            if(y < droppingCoord.y * tileSize)
+            {
+                y += 1;
+                ctx.clearRect(x * tileSize, y * tileSize, tileSize, tileSize);
+            }
+            else{
+                resolve();
+            }      
+        }
+        requestAnimationFrame(animate);
+    })
+}
+
 function updateBoardState()
 {
     handleRemovedMatchesGameLogic();
     handleFillingUpBoardGameLogic();
     setAllJewelsToNotMatched();
-    drawGame();
+    drawGame(ctx, selectedTile);
 }
 
 async function handleClickGameplayLoop() {
@@ -196,7 +157,7 @@ async function handleClickGameplayLoop() {
     while(matches.length > 0)
     {
         labelMatchedJewels(matches);
-        await animateRemoval(matches);
+        await animatedRemoval(matches);
 
         updateBoardState();
         matches = checkForMatches();
@@ -271,18 +232,6 @@ function checkForMatches() {
     return matches;
 }
 
-function getBoardRectangle(x,y)
-{
-    return board.find(rectangle => rectangle.x === x && rectangle.y === y);
-}
-
-function setBoardRectangleValue(x,y,value)
-{
-    const boardRect = getBoardRectangle(x,y);
-    boardRect.value = value;
-    boardRect.removal = false;
-}
-
 function flipValueWithTop(x,y)
 {
     if(y != 0)
@@ -299,8 +248,10 @@ function flipValueWithTop(x,y)
             }
             topRect = getBoardRectangle(x,checkY);
         }
+
         if(topRect != null)
         {
+            //await animatedDropping(topRect,{x,y})
             setBoardRectangleValue(x,y,topRect.value);
             topRect.removal = true;
         }
