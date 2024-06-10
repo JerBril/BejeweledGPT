@@ -65,5 +65,6 @@ export function setBoardRectangleValue(x,y,value)
 {
     const boardRect = getBoardRectangle(x,y);
     boardRect.value = value;
+    boardRect.newValue = value;
     boardRect.removal = false;
 }

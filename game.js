@@ -7,16 +7,23 @@ const ctx = canvas.getContext('2d');
 // Board variables 
 let selectedTile = null;
 let eventsPause = false;
+let lastRenderTime = 0;
+const targetFPS = 5;
+const frameInterval = 1000 / targetFPS;
 
 class gameBoardRectangle {
     constructor(x,y,value) {
         this.x = x;
         this.y = y;
         this.value = value;
+        this.newValue = value;
         this.removal = false;
-        this.dropIn = false;
+        this.dropIn = false; //unused
     }
 }
+
+// Start the game loop
+requestAnimationFrame(gameLoop);
 
 document.addEventListener('DOMContentLoaded', (event) => {
 
@@ -34,7 +41,8 @@ document.addEventListener('DOMContentLoaded', (event) => {
 });
 
 document.addEventListener('click', (event) => {
-    if(!eventsPause)
+    let matches = checkForMatches();
+    if(matches.length == 0)
     {
         const rect = canvas.getBoundingClientRect();
         const x = Math.floor((event.clientX - rect.left) / tileSize);
@@ -42,15 +50,11 @@ document.addEventListener('click', (event) => {
 
         if (!selectedTile) {
             setSelectedTile(event.clientX,event.clientY)
-            drawGame(ctx, selectedTile);
         } else {
             if(checkSwapAllowed(x,y))
             {
-                eventsPause = true;
                 swapTiles(selectedTile.x, selectedTile.y, x, y);
                 selectedTile = null;
-                drawGame(ctx, selectedTile);
-                handleClickGameplayLoop();
             }
             else{
                 console.log('move not allowed');
@@ -59,11 +63,58 @@ document.addEventListener('click', (event) => {
     }
 });
 
+async function gameLoop(currentTime)
+{
+    let deltaTime = currentTime - lastRenderTime;
+
+    if (deltaTime >= frameInterval) {
+        updateGameElements();
+        
+        await renderGameElements();
+
+        postRenderLogic();
+        lastRenderTime = currentTime - (deltaTime % frameInterval);
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+function updateGameElements() {
+    setNewJewelValues();
+    let matches = checkForMatches();
+    labelMatchedJewels(matches);
+}
+
+async function renderGameElements() {
+    drawGame(ctx, selectedTile);
+    await animatedRemoval();
+    drawGame(ctx, selectedTile);
+}
+
+function postRenderLogic() {
+    handleRemovedMatchesGameLogic();
+    handleFillingUpBoardGameLogic();
+    setAllJewelsToNotMatched();
+}
+
+function setNewJewelValues() {
+    for (let y = 0; y < cols; y++) {
+        for (let x = 0; x < rows; x++) {
+            let cur = getBoardRectangle(x,y);
+            if(cur.newValue != cur.value)
+            {
+                console.log('set new value '+cur.newValue+' '+cur.value);
+                setBoardRectangleValue(x,y,cur.newValue);
+            }
+        }
+    }
+}
+
 function setSelectedTile(x1,y1)
 {
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor((x1 - rect.left) / tileSize);
     const y = Math.floor((y1 - rect.top) / tileSize);
+    
     if(x < rows && y < cols)
     {
         selectedTile = {x, y};
@@ -90,40 +141,42 @@ function checkSwapAllowed(x,y)
 function swapTiles(x1, y1, x2, y2) {
     const gameRect1 = getBoardRectangle(x1,y1);
     const gameRect2 = getBoardRectangle(x2,y2);
-    const gameRect1Value = gameRect1.value;
-    const gameRect2Value = gameRect2.value;
-
-    setBoardRectangleValue(x1,y1,gameRect2Value);
-    setBoardRectangleValue(x2,y2,gameRect1Value);
+    gameRect1.newValue = gameRect2.value;
+    gameRect2.newValue = gameRect1.value;
 }
 
 function labelMatchedJewels(matches) {
     matches.forEach(match => {
-        match.removal =true;
+        match.removal = true;
     });
 }
 
-function animatedRemoval(matches) {
-    return new Promise((resolve) => {
-        let opacity = 1;
-        function animate() {
-            if(opacity > 0)
-            {
-                opacity -= 0.003;
-                matches.forEach(match => {
-                    ctx.clearRect(match.x * tileSize, match.y * tileSize, tileSize, tileSize);
-                    drawRectangle(match.x,match.y,opacity);
-                });
-        
-                requestAnimationFrame(animate);
+function animatedRemoval() {
+    
+    let matches = board.filter(jewel => jewel.removal == true)
+    console.log('removal matches  '+matches.length);
+    if(matches.length > 0)
+    {
+        return new Promise((resolve) => {
+            let opacity = 1;
+            function animate() {         
+                if(opacity > 0)
+                {          
+                    opacity -= 0.003;
+                    matches.forEach(match => {
+                        ctx.clearRect(match.x * tileSize, match.y * tileSize, tileSize, tileSize);
+                        drawRectangle(match.x,match.y,opacity);
+                    });
+                    requestAnimationFrame(animate);                   
+                }
+                else{
+                    opacity = 1;
+                    resolve();
+                }
             }
-            else{
-                opacity = 1;
-                resolve();
-            }
-        }
-        requestAnimationFrame(animate);
-    })
+            requestAnimationFrame(animate);
+        })
+    }
 }
 
 function animatedDropping(droppingJewel, droppingCoord) {
@@ -142,27 +195,6 @@ function animatedDropping(droppingJewel, droppingCoord) {
         }
         requestAnimationFrame(animate);
     })
-}
-
-function updateBoardState()
-{
-    handleRemovedMatchesGameLogic();
-    handleFillingUpBoardGameLogic();
-    setAllJewelsToNotMatched();
-    drawGame(ctx, selectedTile);
-}
-
-async function handleClickGameplayLoop() {
-    let matches = checkForMatches();
-    while(matches.length > 0)
-    {
-        labelMatchedJewels(matches);
-        await animatedRemoval(matches);
-
-        updateBoardState();
-        matches = checkForMatches();
-    }
-    eventsPause = false;
 }
 
 function handleRemovedMatchesGameLogic() {
@@ -184,7 +216,7 @@ function handleFillingUpBoardGameLogic()
             let cur = getBoardRectangle(x,y);
             if(cur.removal == true)
             {
-                cur.value = Math.floor(Math.random() * 5);
+                setBoardRectangleValue(x,y,Math.floor(Math.random() * 5));
                 cur.dropIn = true;
             }
         }
